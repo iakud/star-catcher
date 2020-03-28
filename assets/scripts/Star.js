@@ -11,42 +11,38 @@ cc.Class({
     properties: {
         // 星星和主角之间的距离小于这个数值时，就会完成收集
         pickRadius: 0,
-        // foo: {
-        //     // ATTRIBUTES:
-        //     default: null,        // The default value will be used only when the component attaching
-        //                           // to a node for the first time
-        //     type: cc.SpriteFrame, // optional, default is typeof default
-        //     serializable: true,   // optional, default is true
-        // },
-        // bar: {
-        //     get () {
-        //         return this._bar;
-        //     },
-        //     set (value) {
-        //         this._bar = value;
-        //     }
-        // },
     },
 
     // LIFE-CYCLE CALLBACKS:
 
-    // onLoad () {},
+    onLoad: function() {
+        this.enabled = false;
+    },
+
+    init: function(game) {
+        this.game = game;
+        this.enabled = true;
+        this.node.opactity = 255;
+    },
+
+    reuse (game) {
+        this.init(game);
+    },
 
     getPlayerDistance: function() {
         // 根据 player 节点位置判断距离
-        var playerPos = this.game.player.getPosition();
+        var playerPos = this.game.player.getCenterPos();
         // 根据两点位置计算两点之间距离
         var dist = this.node.position.sub(playerPos).mag();
         return dist;
     },
 
     onPicked: function() {
-        // 当星星被收集时，调用 Game 脚本中的接口，生成一个新的星星
-        this.game.spawnNewStar();
+        var pos = this.node.getPosition();
         // 调用 Game 脚本的得分方法
-        this.game.gainScore();
-        // 然后销毁当前星星节点
-        this.node.destroy();
+        this.game.gainScore(pos);
+        // 当星星被收集时，调用 Game 脚本中的接口，销毁当前星星节点，生成一个新的星星
+        this.game.despawnStar(this.node);
     },
 
     start () {

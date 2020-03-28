@@ -13,6 +13,8 @@ cc.Class({
         jumpHeight: 0,
         // 主角跳跃持续时间
         jumpDuration: 0,
+        // 辅助形变动作时间
+        squashDuration: 0,
         // 最大移动速度
         maxMoveSpeed: 0,
         // 加速度
@@ -22,46 +24,57 @@ cc.Class({
             default: null,
             type: cc.AudioClip
         },
-        // foo: {
-        //     // ATTRIBUTES:
-        //     default: null,        // The default value will be used only when the component attaching
-        //                           // to a node for the first time
-        //     type: cc.SpriteFrame, // optional, default is typeof default
-        //     serializable: true,   // optional, default is true
-        // },
-        // bar: {
-        //     get () {
-        //         return this._bar;
-        //     },
-        //     set (value) {
-        //         this._bar = value;
-        //     }
-        // },
     },
 
-    setJumpAction: function() {
-        // 跳跃上升
-        var jumpUp = cc.moveBy(this.jumpDuration, cc.v2(0, this.jumpHeight)).easing(cc.easeCubicActionOut());
-        // 下落
-        var jumpDown = cc.moveBy(this.jumpDuration, cc.v2(0, -this.jumpHeight)).easing(cc.easeCubicActionIn());
-        // 添加一个回调函数，用于在动作结束时调用我们定义的其他方法
-        var callback = cc.callFunc(this.playJumpSound, this);
-        // 不断重复
-        return cc.repeatForever(cc.sequence(jumpUp, jumpDown, callback));
+    // LIFE-CYCLE CALLBACKS:
+
+    // onLoad () {},
+    onLoad: function() {
+        this.enabled = false;
+
+        // 加速度方向开关
+        this.accLeft = false;
+        this.accRight = false;
+        // 主角当前水平方向速度
+        this.xSpeed = 0;
+
+        // 初始化跳跃动作
+        this.jumpAction = this.setJumpAction();
+
+        // 初始化键盘输入监听
+        cc.systemEvent.on(cc.SystemEvent.EventType.KEY_DOWN, this.onKeyDown, this);
+        cc.systemEvent.on(cc.SystemEvent.EventType.KEY_UP, this.onKeyUp, this);
+
+        var touchReceiver = cc.Canvas.instance.node;
+        touchReceiver.on('touchstart', this.onTouchStart, this);
+        touchReceiver.on('touchend', this.onTouchEnd, this);
     },
 
-    playJumpSound: function() {
-        // 调用声音引擎播放声音
-        cc.audioEngine.playEffect(this.jumpAudio, false);
+    onDestroy() {
+        // 取消键盘输入监听
+        cc.systemEvent.off(cc.SystemEvent.EventType.KEY_DOWN, this.onKeyDown, this);
+        cc.systemEvent.off(cc.SystemEvent.EventType.KEY_UP, this.onKeyUp, this);
+
+        var touchReceiver = cc.Canvas.instance.node;
+        touchReceiver.off('touchstart', this.onTouchStart, this);
+        touchReceiver.off('touchend', this.onTouchEnd, this);
+    },
+
+    start () {
+
     },
 
     onKeyDown(event) {
         // set a flag when key pressed
         switch(event.keyCode) {
             case cc.macro.KEY.a:
+            case cc.macro.KEY.left:
                 this.accLeft = true;
+                this.accRight = false;
                 break;
             case cc.macro.KEY.d:
+            case cc.macro.KEY.right:
+                this.accLeft = false;
                 this.accRight = true;
                 break;
         }
@@ -71,41 +84,67 @@ cc.Class({
         // unset a flag when key released
         switch(event.keyCode) {
             case cc.macro.KEY.a:
+            case cc.macro.KEY.left:
                 this.accLeft = false;
                 break;
             case cc.macro.KEY.d:
+            case cc.macro.KEY.right:
                 this.accRight = false;
                 break;
         }
     },
 
-    // LIFE-CYCLE CALLBACKS:
+    onTouchStart(event) {
+        var touchLoc = event.getLocation();
+        if (touchLoc.x < cc.winSize.width/2) {
+            this.accLeft = true;
+            this.accRight = false;
+        } else {
+            this.accLeft = false;
+            this.accRight = true;
+        }
+    },
 
-    // onLoad () {},
-    onLoad: function() {
-        // 初始化跳跃动作
-        this.jumpAction = this.setJumpAction();
-        this.node.runAction(this.jumpAction);
-
-        // 加速度方向开关
+    onTouchEnd(event) {
         this.accLeft = false;
         this.accRight = false;
-        // 主角当前水平方向速度
+    },
+
+    setJumpAction: function() {
+        // 跳跃上升
+        var jumpUp = cc.moveBy(this.jumpDuration, cc.v2(0, this.jumpHeight)).easing(cc.easeCubicActionOut());
+        // 下落
+        var jumpDown = cc.moveBy(this.jumpDuration, cc.v2(0, -this.jumpHeight)).easing(cc.easeCubicActionIn());
+        // 形变
+        var squash = cc.scaleTo(this.squashDuration, 1, 0.6);
+        var stretch = cc.scaleTo(this.squashDuration, 1, 1.2);
+        var scaleBack = cc.scaleTo(this.squashDuration, 1, 1);
+        // 添加一个回调函数，用于在动作结束时调用我们定义的其他方法
+        var callback = cc.callFunc(this.playJumpSound, this);
+        // 不断重复
+        return cc.repeatForever(cc.sequence(squash, stretch, jumpUp, scaleBack, jumpDown, callback));
+    },
+
+    playJumpSound: function() {
+        // 调用声音引擎播放声音
+        cc.audioEngine.playEffect(this.jumpAudio, false);
+    },
+
+    getCenterPos: function() {
+        var centerPos = cc.v2(this.node.x, this.node.y + this.node.height/2);
+        return centerPos;
+    },
+
+    startMoveAt: function (pos) {
+        this.enabled = true;
         this.xSpeed = 0;
-
-        // 初始化键盘输入监听
-        cc.systemEvent.on(cc.SystemEvent.EventType.KEY_DOWN, this.onKeyDown, this);
-        cc.systemEvent.on(cc.SystemEvent.EventType.KEY_UP, this.onKeyUp, this);
+        this.node.setPosition(pos);
+        this.node.runAction(this.jumpAction);
     },
 
-    onDestroy() {
-        // 取消键盘输入监听
-        cc.systemEvent.off(cc.SystemEvent.KEY_DOWN, this.onKeyDown, this);
-        cc.systemEvent.off(cc.SystemEvent.KEY_UP, this.onKeyUp, this);
-    },
-
-    start () {
-
+    stopMove: function() {
+        this.enabled = false;
+        this.node.stopAllActions();
     },
 
     // update (dt) {},
@@ -124,5 +163,14 @@ cc.Class({
 
         // 根据当前速度更新主角的位置
         this.node.x += this.xSpeed * dt;
+
+        // 限制玩家位置在屏幕中
+        if (this.node.x > this.node.parent.width/2) {
+            this.node.x = this.node.parent.width/2;
+            this.xSpeed = 0;
+        } else if (this.node.x < - this.node.parent.width/2) {
+            this.node.x = - this.node.parent.width/2
+            this.xSpeed = 0;
+        }
     },
 });
